@@ -155,18 +155,23 @@ async function spawnReadyPending(
  * already handed-off).
  */
 function canMakeProgress(mgr: AgentManager): boolean {
+  const planTaskNames = planTaskNameSet(mgr.plan);
   return mgr.tasks.some(
     s =>
       s.status === "running" ||
-      (s.status === "pending" && pendingCouldStillSpawn(mgr, s))
+      (s.status === "pending" && pendingCouldStillSpawn(mgr, s, planTaskNames))
   );
 }
 
-function pendingCouldStillSpawn(mgr: AgentManager, task: TaskState): boolean {
+function pendingCouldStillSpawn(
+  mgr: AgentManager,
+  task: TaskState,
+  planTaskNames: ReadonlySet<string> = planTaskNameSet(mgr.plan)
+): boolean {
   // Ad-hoc tasks (not in plan.tasks) are never spawned by the reconcile
   // loop; operator must re-run `cli.ts spawn` or `kill` them. Treating
   // them as "still schedulable" here would hang the loop indefinitely.
-  if (!planTasks(mgr.plan).some(t => t.name === task.name)) return false;
+  if (!planTaskNames.has(task.name)) return false;
   const memo = new Map<string, boolean>();
   const visit = (s: TaskState, path: Set<string>): boolean => {
     const cached = memo.get(s.name);
@@ -292,6 +297,14 @@ function printLoopSummary(mgr: AgentManager): void {
 
 function planTasks(plan: Plan): PlanTask[] {
   return plan.tasks ?? [];
+}
+
+function planTaskNameSet(plan: Plan): Set<string> {
+  const names = new Set<string>();
+  for (const task of planTasks(plan)) {
+    names.add(task.name);
+  }
+  return names;
 }
 
 function truncate(s: string, n: number): string {
